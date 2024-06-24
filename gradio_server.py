@@ -83,7 +83,7 @@ Paragraphs:
     print("inital", written_paras)
     return start_input_to_human['output_memory'], long_memory, written_paras, init_paragraphs['Instruction 1'], init_paragraphs['Instruction 2'], init_paragraphs['Instruction 3']
 
-def step(novel_type, description, language, short_memory, long_memory, instruction1, instruction2, instruction3, current_paras, save_story, request: gr.Request,):
+def step(novel_type, description, language, short_memory, long_memory, save_story, instruction1, instruction2, instruction3, current_paras, request: gr.Request,):
     out_file = None
     if save_story == "Yes":
         out_file = f"{novel_type}_{description}_{language}.txt"
@@ -136,7 +136,7 @@ def step(novel_type, description, language, short_memory, long_memory, instructi
     return writer.output['output_memory'], long_memory, current_paras + '\n\n' + writer.output['input_paragraph'], human.output['output_instruction'], *writer.output['output_instruction']
 
 
-def controled_step(novel_type, description, language, short_memory, long_memory, selected_instruction, current_paras, save_story, request: gr.Request, ):
+def controled_step(novel_type, description, language, short_memory, save_story, long_memory, selected_instruction, current_paras, request: gr.Request, ):
     out_file = None
     if save_story == "Yes":
         out_file = f"{novel_type}_{description}_{language}.txt"
@@ -236,7 +236,7 @@ with gr.Blocks(title="RecurrentGPT", css="footer {visibility: hidden}", theme="d
         btn_step = gr.Button("Next Step", elem_id="step_button")
         btn_init.click(init, inputs=[novel_type, description, language, save_story], outputs=[
             short_memory, long_memory, written_paras, instruction1, instruction2, instruction3])
-        btn_step.click(step, inputs=[novel_type, description, language, short_memory, long_memory, instruction1, instruction2, instruction3, save_story, written_paras], outputs=[
+        btn_step.click(step, inputs=[novel_type, description, language, save_story, short_memory, long_memory, instruction1, instruction2, instruction3, written_paras], outputs=[
             short_memory, long_memory, written_paras, selected_plan, instruction1, instruction2, instruction3])
     
     # new tab
@@ -282,7 +282,7 @@ with gr.Blocks(title="RecurrentGPT", css="footer {visibility: hidden}", theme="d
         btn_step = gr.Button("Next Step", elem_id="step_button")
         btn_init.click(init, inputs=[novel_type, description, language, save_story], outputs=[
             short_memory, long_memory, written_paras, instruction1, instruction2, instruction3])
-        btn_step.click(controled_step, inputs=[novel_type, description, language, short_memory, long_memory, selected_instruction, save_story, written_paras], outputs=[
+        btn_step.click(controled_step, inputs=[novel_type, description, language, save_story, short_memory, long_memory, selected_instruction, written_paras], outputs=[
             short_memory, long_memory, written_paras, last_step, instruction1, instruction2, instruction3])
         selected_plan.select(on_select, inputs=[
                              instruction1, instruction2, instruction3], outputs=[selected_instruction])
