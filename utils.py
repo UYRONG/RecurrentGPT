@@ -1,15 +1,21 @@
 import re
+import os
 from openai import OpenAI
 import re
 api_key = os.getenv("OPENAI_API_KEY")
 api_base = os.getenv("OPENAI_API_BASE")
-def get_api_response(content: str, max_tokens=None):
+def get_api_response(content: str, language, max_tokens=None):
     client = OpenAI(api_key=api_key,base_url=api_base)
+    content_statement = 'You are a helpful and creative assistant for writing novel.'
+    if language != "":
+        content_statement += f"You are professional in {language} language and all of your response should be able in {language} language."
+
+
     response = client.chat.completions.create(
-        model='gpt-4o-2024-05-13',
+        model='gpt-3.5-turbo',
         messages=[{
             'role': 'system',
-            'content': 'You are a helpful and creative assistant for writing novel.'
+            'content': content_statement
         }, {
             'role': 'user',
             'content': content,
@@ -29,13 +35,14 @@ def get_content_between_a_b(a,b,text):
     return re.search(f"{a}(.*?)\n{b}", text, re.DOTALL).group(1).strip()
 
 
-def get_init(init_text=None,text=None,response_file=None):
+def get_init(init_text=None,text=None,language=None,response_file=None):
     """
     init_text: if the title, outline, and the first 3 paragraphs are given in a .txt file, directly read
     text: if no .txt file is given, use init prompt to generate
     """
     if not init_text:
-        response = get_api_response(text)
+        print(text)
+        response = get_api_response(text, language)
         print(response)
 
         if response_file:

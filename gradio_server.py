@@ -4,6 +4,7 @@ from recurrentgpt import RecurrentGPT
 from human_simulator import Human
 from sentence_transformers import SentenceTransformer
 from utils import get_init, parse_instructions
+from starlette.requests import Request
 import re
 
 
@@ -13,13 +14,15 @@ _CACHE = {}
 # Build the semantic search model
 embedder = SentenceTransformer('multi-qa-mpnet-base-cos-v1')
 
-def init_prompt(novel_type, description):
+def init_prompt(novel_type, description, language):
     if description == "":
         description = ""
     else:
         description = " about " + description
+    if language != "":
+        description += f" in {language} language"
     return f"""
-Please write a {novel_type} novel{description} with 50 chapters. Follow the format below precisely:
+Please write a {novel_type} novel{description}with 50 chapters. Follow the format below precisely:
 
 Begin with the name of the novel.
 Next, write an outline for the first chapter. The outline should describe the background and the beginning of the novel.
@@ -41,14 +44,25 @@ Make sure to be precise and follow the output format strictly.
 
 """
 
-def init(novel_type, description, request: gr.Request):
+def init(novel_type, description, language, request: gr.Request):
+    cookie = request.headers.get('cookie', None)
+    if cookie is None:
+        # Handle the case where the cookie is not present
+        # print("Cookie not found in the request headers????")
+        cookie = ""
+    else:
+        cookie = request.headers['cookie']
+        cookie = cookie.split('; _gat_gtag')[0]
+
     if novel_type == "":
         novel_type = "Science Fiction"
     global _CACHE
-    cookie = request.headers['cookie']
-    cookie = cookie.split('; _gat_gtag')[0]
+    # print("what is cache", _CACHE)
+    # cookie = request.headers['cookie']
+    # cookie = cookie.split('; _gat_gtag')[0]
     # prepare first init
-    init_paragraphs = get_init(text=init_prompt(novel_type,description))
+    out_file = f"{novel_type}_{description}_{language}.txt"
+    init_paragraphs = get_init(text=init_prompt(novel_type, description, language),response_file=out_file)
     # print(init_paragraphs)
     start_input_to_human = {
         'output_paragraph': init_paragraphs['Paragraph 3'],
@@ -70,15 +84,28 @@ Paragraphs:
     # short memory, long memory, current written paragraphs, 3 next instructions
     return start_input_to_human['output_memory'], long_memory, written_paras, init_paragraphs['Instruction 1'], init_paragraphs['Instruction 2'], init_paragraphs['Instruction 3']
 
-def step(short_memory, long_memory, instruction1, instruction2, instruction3, current_paras, request: gr.Request, ):
+def step(novel_type, description, language, short_memory, long_memory, instruction1, instruction2, instruction3, current_paras, request: gr.Request,):
+    out_file = f"{novel_type}_{description}_{language}.txt"
+    
     if current_paras == "":
         return "", "", "", "", "", ""
     global _CACHE
     # print(list(_CACHE.keys()))
     # print(request.headers.get('cookie'))
-    cookie = request.headers['cookie']
-    cookie = cookie.split('; _gat_gtag')[0]
+    # cookie = request.headers['cookie']
+    # cookie = cookie.split('; _gat_gtag')[0]
+    # print(cookie)
+    cookie = request.headers.get('cookie', None)
+    if cookie is None:
+        # Handle the case where the cookie is not present
+        # print("Cookie not found in the request headers????")
+        cookie = ""
+    else:
+        cookie = request.headers['cookie']
+        cookie = cookie.split('; _gat_gtag')[0]
+    # print("what is globle cache", _CACHE)
     cache = _CACHE[cookie]
+    # print("what is cache", cache)
 
     if "writer" not in cache:
         start_input_to_human = cache["start_input_to_human"]
@@ -86,14 +113,14 @@ def step(short_memory, long_memory, instruction1, instruction2, instruction3, cu
             instruction1, instruction2, instruction3]
         init_paragraphs = cache["init_paragraphs"]
         human = Human(input=start_input_to_human,
-                      memory=None, embedder=embedder)
+                      memory=None, embedder=embedder, language=language, output_file=out_file)
         human.step()
         start_short_memory = init_paragraphs['Summary']
         writer_start_input = human.output
 
         # Init writerGPT
         writer = RecurrentGPT(input=writer_start_input, short_memory=start_short_memory, long_memory=[
-            init_paragraphs['Paragraph 1'], init_paragraphs['Paragraph 2']], memory_index=None, embedder=embedder)
+            init_paragraphs['Paragraph 1'], init_paragraphs['Paragraph 2']], memory_index=None, embedder=embedder, language=language, output_file=out_file)
         cache["writer"] = writer
         cache["human"] = human
         writer.step()
@@ -110,33 +137,44 @@ def step(short_memory, long_memory, instruction1, instruction2, instruction3, cu
         writer.input = human.output
         writer.step()
 
-    long_memory = [[v] for v in writer.long_memory]
+    # long_memory = [[v] for v in writer.long_memory]
+    long_memory = parse_instructions(writer.long_memory)
     # short memory, long memory, current written paragraphs, 3 next instructions
     return writer.output['output_memory'], long_memory, current_paras + '\n\n' + writer.output['input_paragraph'], human.output['output_instruction'], *writer.output['output_instruction']
 
 
-def controled_step(short_memory, long_memory, selected_instruction, current_paras, request: gr.Request, ):
+def controled_step(language, short_memory, long_memory, selected_instruction, current_paras, out_file, request: gr.Request, ):
     if current_paras == "":
         return "", "", "", "", "", ""
     global _CACHE
     # print(list(_CACHE.keys()))
     # print(request.headers.get('cookie'))
-    cookie = request.headers['cookie']
-    cookie = cookie.split('; _gat_gtag')[0]
+    cookie = request.headers.get('cookie', None)
+    if cookie is None:
+        # Handle the case where the cookie is not present
+        print("Cookie not found in the request headers????")
+        cookie = ""
+    else:
+        cookie = request.headers['cookie']
+        cookie = cookie.split('; _gat_gtag')[0]
+    # cookie = request.headers['cookie']
+    # cookie = cookie.split('; _gat_gtag')[0]
     cache = _CACHE[cookie]
+
+    # print("what is cache", cache)
     if "writer" not in cache:
         start_input_to_human = cache["start_input_to_human"]
         start_input_to_human['output_instruction'] = selected_instruction
         init_paragraphs = cache["init_paragraphs"]
         human = Human(input=start_input_to_human,
-                      memory=None, embedder=embedder)
+                      memory=None, embedder=embedder, language=language, output_file=out_file)
         human.step()
         start_short_memory = init_paragraphs['Summary']
         writer_start_input = human.output
 
         # Init writerGPT
         writer = RecurrentGPT(input=writer_start_input, short_memory=start_short_memory, long_memory=[
-            init_paragraphs['Paragraph 1'], init_paragraphs['Paragraph 2']], memory_index=None, embedder=embedder)
+            init_paragraphs['Paragraph 1'], init_paragraphs['Paragraph 2']], memory_index=None, embedder=embedder, language=language, output_file=out_file)
         cache["writer"] = writer
         cache["human"] = human
         writer.step()
@@ -150,7 +188,7 @@ def controled_step(short_memory, long_memory, selected_instruction, current_para
         human.step()
         writer.input = human.output
         writer.step()
-
+    # long_memory = parse_instructions(writer.long_memory)
     # short memory, long memory, current written paragraphs, 3 next instructions
     return writer.output['output_memory'], parse_instructions(writer.long_memory), current_paras + '\n\n' + writer.output['input_paragraph'], *writer.output['output_instruction']
 
@@ -168,6 +206,7 @@ with gr.Blocks(title="RecurrentGPT", css="footer {visibility: hidden}", theme="d
                 novel_type = gr.Textbox(
                     label="Novel Type", placeholder="e.g. science fiction")
                 description = gr.Textbox(label="Topic")
+                language = gr.Textbox(label="Language")
             btn_init = gr.Button(
                 "Init Novel Generation", elem_id="init_button")
             gr.Examples(["Science Fiction", "Romance", "Mystery", "Fantasy",
@@ -191,11 +230,11 @@ with gr.Blocks(title="RecurrentGPT", css="footer {visibility: hidden}", theme="d
                 label="Instruction 3 (editable)", lines=4)
             selected_plan = gr.Textbox(
                 label="Revised Instruction (from last step)", lines=2)
-
+        # out_file = f"{novel_type}_{description}_{language}.txt"
         btn_step = gr.Button("Next Step", elem_id="step_button")
-        btn_init.click(init, inputs=[novel_type, description], outputs=[
+        btn_init.click(init, inputs=[novel_type, description, language], outputs=[
             short_memory, long_memory, written_paras, instruction1, instruction2, instruction3])
-        btn_step.click(step, inputs=[short_memory, long_memory, instruction1, instruction2, instruction3, written_paras], outputs=[
+        btn_step.click(step, inputs=[novel_type, description, language, short_memory, long_memory, instruction1, instruction2, instruction3, written_paras], outputs=[
             short_memory, long_memory, written_paras, selected_plan, instruction1, instruction2, instruction3])
 
     demo.launch()

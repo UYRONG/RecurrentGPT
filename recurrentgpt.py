@@ -8,7 +8,7 @@ from sentence_transformers import  util
 
 class RecurrentGPT:
 
-    def __init__(self, input, short_memory, long_memory, memory_index, embedder):
+    def __init__(self, input, short_memory, long_memory, memory_index, embedder, language, output_file = None):
         self.input = input
         self.short_memory = short_memory
         self.long_memory = long_memory
@@ -17,6 +17,8 @@ class RecurrentGPT:
             self.memory_index = self.embedder.encode(
                 self.long_memory, convert_to_tensor=True)
         self.output = {}
+        self.language = language
+        self.response_file = output_file
 
     def prepare_input(self, new_character_prob=0.1, top_k=2):
 
@@ -114,20 +116,20 @@ class RecurrentGPT:
         except:
             return None
 
-    def step(self, response_file=None):
+    def step(self):
 
         prompt = self.prepare_input()
 
         print(prompt+'\n'+'\n')
 
-        response = get_api_response(prompt)
+        response = get_api_response(prompt, self.language)
 
         self.output = self.parse_output(response)
         while self.output == None:
-            response = get_api_response(prompt)
+            response = get_api_response(prompt, self.language)
             self.output = self.parse_output(response)
-        if response_file:
-            with open(response_file, 'a', encoding='utf-8') as f:
+        if self.response_file:
+            with open(self.response_file, 'a', encoding='utf-8') as f:
                 f.write(f"Writer's output here:\n{response}\n\n")
 
         self.long_memory.append(self.input["output_paragraph"])

@@ -3,7 +3,7 @@ from utils import get_content_between_a_b, parse_instructions,get_api_response
 
 class Human:
 
-    def __init__(self, input, memory, embedder):
+    def __init__(self, input, memory, embedder, language, output_file=None):
         self.input = input
         if memory:
             self.memory = memory
@@ -11,6 +11,8 @@ class Human:
             self.memory = self.input['output_memory']
         self.embedder = embedder
         self.output = {}
+        self.language = language
+        self.response_file = output_file
 
 
     def prepare_input(self):
@@ -20,7 +22,7 @@ class Human:
         user_edited_plan = self.input["output_instruction"]
 
         input_text = f"""
-        Now imagine you are a novelist writing a Chinese novel with the help of ChatGPT. You will be given a previously written paragraph (wrote by you), and a paragraph written by your ChatGPT assistant, a summary of the main storyline maintained by your ChatGPT assistant, and a plan of what to write next proposed by your ChatGPT assistant.
+        Now imagine you are a novelist writing a {self.language} novel with the help of ChatGPT. You will be given a previously written paragraph (wrote by you), and a paragraph written by your ChatGPT assistant, a summary of the main storyline maintained by your ChatGPT assistant, and a plan of what to write next proposed by your ChatGPT assistant.
     I need you to write:
     1. Extended Paragraph: Extend the new paragraph written by the ChatGPT assistant to twice the length of the paragraph written by your ChatGPT assistant.
     2. Selected Plan: Copy the plan proposed by your ChatGPT assistant.
@@ -38,7 +40,7 @@ class Human:
     The plan of what to write next proposed by your ChatGPT assistant:
     {user_edited_plan}
 
-    Now start writing, organize your output by strictly following the output format as below,所有输出仍然保持是中文:
+    Now start writing, organize your output by strictly following the output format as below, keep the language consistent as the input language:
     
     Extended Paragraph: 
     <string of output paragraph>, around 40-50 sentences.
@@ -60,7 +62,7 @@ class Human:
         return plan
 
 
-    def select_plan(self,response_file):
+    def select_plan(self):
         
         previous_paragraph = self.input["input_paragraph"]
         writer_new_paragraph = self.input["output_paragraph"]
@@ -93,15 +95,15 @@ class Human:
     """
         print(prompt+'\n'+'\n')
 
-        response = get_api_response(prompt)
+        response = get_api_response(prompt, self.language)
 
         plan = self.parse_plan(response)
         while plan == None:
-            response = get_api_response(prompt)
+            response = get_api_response(prompt, self.language)
             plan= self.parse_plan(response)
 
-        if response_file:
-            with open(response_file, 'a', encoding='utf-8') as f:
+        if self.response_file:
+            with open(self.response_file, 'a', encoding='utf-8') as f:
                 f.write(f"Selected plan here:\n{response}\n\n")
 
         return plan
@@ -131,16 +133,16 @@ class Human:
         except:
             return None
 
-    def step(self, response_file=None):
+    def step(self):
 
         prompt = self.prepare_input()
         print(prompt+'\n'+'\n')
 
-        response = get_api_response(prompt)
+        response = get_api_response(prompt, self.language)
         self.output = self.parse_output(response)
         while self.output == None:
-            response = get_api_response(prompt)
+            response = get_api_response(prompt, self.language)
             self.output = self.parse_output(response)
-        if response_file:
-            with open(response_file, 'a', encoding='utf-8') as f:
+        if self.response_file:
+            with open(self.response_file, 'a', encoding='utf-8') as f:
                 f.write(f"Human's output here:\n{response}\n\n")
